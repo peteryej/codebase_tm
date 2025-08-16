@@ -40,33 +40,58 @@ fi
 echo "Contents of venv directory:"
 ls -la "$VENV_DIR/" || echo "venv directory does not exist"
 
+echo "Contents of venv/bin directory:"
+ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
+
 # Verify virtual environment was created successfully
-if [ ! -f "$VENV_DIR/bin/python" ]; then
+if [ ! -f "$VENV_DIR/bin/python" ] && [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo "ERROR: Virtual environment creation failed!"
-    echo "$VENV_DIR/bin/python does not exist"
-    echo "Contents of $VENV_DIR/bin/:"
-    ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
-    echo "Make sure python3-venv is installed: sudo apt install python3-venv"
-    exit 1
+    echo "Neither $VENV_DIR/bin/python nor $VENV_DIR/bin/python3 exists"
+    echo "Trying to recreate virtual environment with --copies flag..."
+    rm -rf "$VENV_DIR"
+    python3 -m venv --copies "$VENV_DIR"
+    
+    if [ ! -f "$VENV_DIR/bin/python" ] && [ ! -f "$VENV_DIR/bin/python3" ]; then
+        echo "ERROR: Virtual environment creation still failed!"
+        echo "Contents of $VENV_DIR/bin/ after recreation:"
+        ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
+        exit 1
+    fi
 fi
 
 echo "Virtual environment created successfully"
+
+# Determine which python executable to use
+if [ -f "$VENV_DIR/bin/python" ]; then
+    PYTHON_EXEC="$VENV_DIR/bin/python"
+    PIP_EXEC="$VENV_DIR/bin/pip"
+elif [ -f "$VENV_DIR/bin/python3" ]; then
+    PYTHON_EXEC="$VENV_DIR/bin/python3"
+    PIP_EXEC="$VENV_DIR/bin/pip3"
+else
+    echo "ERROR: No python executable found in virtual environment"
+    exit 1
+fi
+
+echo "Using Python executable: $PYTHON_EXEC"
+echo "Using pip executable: $PIP_EXEC"
+
 echo "Activating virtual environment..."
 source "$VENV_DIR/bin/activate"
 
 echo "Installing/updating dependencies..."
-"$VENV_DIR/bin/pip" install --upgrade pip
-"$VENV_DIR/bin/pip" install -r requirements.txt
+"$PIP_EXEC" install --upgrade pip
+"$PIP_EXEC" install -r requirements.txt
 
 # Verify dependencies were installed
 if [ ! -f "$VENV_DIR/bin/gunicorn" ]; then
     echo "Installing gunicorn..."
-    "$VENV_DIR/bin/pip" install gunicorn
+    "$PIP_EXEC" install gunicorn
 fi
 
 # Initialize database AFTER dependencies are installed
 echo "Initializing database..."
-"$VENV_DIR/bin/python" backend/database/init_db.py
+"$PYTHON_EXEC" backend/database/init_db.py
 
 # Start the application
 echo "Starting Codebase Time Machine..."
