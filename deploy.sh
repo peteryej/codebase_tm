@@ -13,11 +13,7 @@ export FLASK_DEBUG=False
 mkdir -p data/cache
 mkdir -p data/repos
 
-# Initialize database (always run to ensure tables exist)
-echo "Initializing database..."
-venv/bin/python backend/database/init_db.py
-
-# Create and setup virtual environment
+# Create and setup virtual environment FIRST
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
     python3 -m venv venv
@@ -26,6 +22,7 @@ fi
 # Verify virtual environment was created successfully
 if [ ! -f "venv/bin/python" ]; then
     echo "ERROR: Virtual environment creation failed!"
+    echo "Make sure python3-venv is installed: sudo apt install python3-venv"
     exit 1
 fi
 
@@ -35,6 +32,10 @@ source venv/bin/activate
 echo "Installing/updating dependencies..."
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
+
+# Initialize database AFTER dependencies are installed
+echo "Initializing database..."
+venv/bin/python backend/database/init_db.py
 
 # Start the application
 echo "Starting Codebase Time Machine..."

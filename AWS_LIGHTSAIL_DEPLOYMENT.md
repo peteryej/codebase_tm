@@ -43,6 +43,7 @@ ssh -i /path/to/your-key.pem ubuntu@YOUR_LIGHTSAIL_IP
 sudo apt update && sudo apt upgrade -y
 
 # Install required packages
+sudo apt update
 sudo apt install -y python3 python3-pip python3-venv git curl
 
 # Clone your repository
