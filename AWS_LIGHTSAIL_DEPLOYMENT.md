@@ -44,7 +44,11 @@ sudo apt update && sudo apt upgrade -y
 
 # Install required packages
 sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git curl
+sudo apt install -y python3 python3-pip git curl
+
+# Install the correct python3-venv package for your Python version
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+sudo apt install -y python${PYTHON_VERSION}-venv
 
 # Clone your repository
 git clone https://github.com/your-username/your-repo.git

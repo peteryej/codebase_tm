@@ -17,21 +17,40 @@ mkdir -p data/repos
 SCRIPT_DIR=$(pwd)
 VENV_DIR="$SCRIPT_DIR/venv"
 
+# Check if python3-venv is properly installed
+echo "Checking python3-venv installation..."
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+VENV_PACKAGE="python${PYTHON_VERSION}-venv"
+
+echo "Python version: $PYTHON_VERSION"
+echo "Required package: $VENV_PACKAGE"
+
+# Install the correct python3-venv package if not available
+if ! dpkg -l | grep -q "$VENV_PACKAGE"; then
+    echo "Installing $VENV_PACKAGE..."
+    apt update
+    apt install -y "$VENV_PACKAGE"
+fi
+
 # Remove existing virtual environment if it exists but is broken
-if [ -d "$VENV_DIR" ] && [ ! -f "$VENV_DIR/bin/python" ]; then
-    echo "Removing broken virtual environment..."
+if [ -d "$VENV_DIR" ]; then
+    echo "Removing existing virtual environment..."
     rm -rf "$VENV_DIR"
 fi
 
 # Create and setup virtual environment FIRST
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment at $VENV_DIR..."
+echo "Creating virtual environment at $VENV_DIR..."
+python3 -m venv "$VENV_DIR"
+
+# Check if creation was successful
+if [ $? -ne 0 ]; then
+    echo "ERROR: Virtual environment creation failed!"
+    echo "Trying to install python3-venv and python3-pip..."
+    apt install -y python3-venv python3-pip
     python3 -m venv "$VENV_DIR"
     
-    # Check if creation was successful
     if [ $? -ne 0 ]; then
-        echo "ERROR: Virtual environment creation failed!"
-        echo "Make sure python3-venv is installed: sudo apt install python3-venv"
+        echo "ERROR: Virtual environment creation still failed!"
         exit 1
     fi
 fi
