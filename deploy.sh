@@ -43,20 +43,25 @@ ls -la "$VENV_DIR/" || echo "venv directory does not exist"
 echo "Contents of venv/bin directory:"
 ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
 
+# Check if pip and activate are missing (common issue on Ubuntu)
+if [ ! -f "$VENV_DIR/bin/pip" ] || [ ! -f "$VENV_DIR/bin/activate" ]; then
+    echo "Virtual environment is incomplete (missing pip or activate)"
+    echo "Recreating with --copies and ensuring ensurepip..."
+    rm -rf "$VENV_DIR"
+    python3 -m venv --copies "$VENV_DIR"
+    
+    # Manually ensure pip is installed
+    "$VENV_DIR/bin/python" -m ensurepip --upgrade
+    
+    echo "Contents of venv/bin directory after recreation:"
+    ls -la "$VENV_DIR/bin/"
+fi
+
 # Verify virtual environment was created successfully
 if [ ! -f "$VENV_DIR/bin/python" ] && [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo "ERROR: Virtual environment creation failed!"
     echo "Neither $VENV_DIR/bin/python nor $VENV_DIR/bin/python3 exists"
-    echo "Trying to recreate virtual environment with --copies flag..."
-    rm -rf "$VENV_DIR"
-    python3 -m venv --copies "$VENV_DIR"
-    
-    if [ ! -f "$VENV_DIR/bin/python" ] && [ ! -f "$VENV_DIR/bin/python3" ]; then
-        echo "ERROR: Virtual environment creation still failed!"
-        echo "Contents of $VENV_DIR/bin/ after recreation:"
-        ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
-        exit 1
-    fi
+    exit 1
 fi
 
 echo "Virtual environment created successfully"
