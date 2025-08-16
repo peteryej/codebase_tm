@@ -6,6 +6,7 @@ import logging
 import hashlib
 import os
 import json
+from typing import List, Dict
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from openai import OpenAI
@@ -62,6 +63,7 @@ def _classify_query_with_openai(query_text: str, repo_data: dict) -> dict:
             "development_patterns",
             "file_changes",
             "feature_introduction",
+            "feature_evolution",
             "repository_summary"
         ]
         
@@ -84,6 +86,7 @@ Your task is to classify the user query and determine the best approach:
    - Code ownership and responsibility
    - Development activity and trends
    - When features were introduced or implemented
+   - How features evolved over time or why they were added
    - Repository statistics and summaries
 
 2. "rag_codebase" - Use this when the query requires examining actual source code content, specific implementations, or detailed code analysis. These queries typically ask about:
@@ -159,6 +162,14 @@ def _fallback_query_classification(query_text: str) -> dict:
             'confidence': 0.8,
             'reasoning': 'Fallback: Detected feature introduction keywords'
         }
+    elif any(word in query_lower for word in ['why', 'evolved', 'evolution', 'changed', 'developed', 'how', 'motivation', 'reason']):
+        logger.debug("Fallback: Detected feature evolution keywords")
+        return {
+            'approach': 'structured_data',
+            'query_type': 'feature_evolution',
+            'confidence': 0.8,
+            'reasoning': 'Fallback: Detected feature evolution keywords'
+        }
     elif any(word in query_lower for word in ['timeline', 'history', 'commit']):
         logger.debug("Fallback: Detected timeline-related keywords")
         return {
@@ -210,7 +221,7 @@ def _handle_rag_codebase_query(repository_id: int, query_text: str, repo_data: d
             }
         
         # Get repository path
-        repos_path = os.getenv('REPOS_PATH', './data/repos')
+        repos_path = os.getenv('REPOS_PATH', '../data/repos')
         repo_name = f"{repo_data['owner']}_{repo_data['name']}"
         repo_path = os.path.join(repos_path, repo_name)
         logger.debug(f"Repository path: {repo_path}")
@@ -725,6 +736,9 @@ def _process_natural_language_query(repository_id: int, query_text: str, repo_da
             elif query_type == 'feature_introduction':
                 return _handle_feature_introduction_query(repository_id, query_text)
             
+            elif query_type == 'feature_evolution':
+                return _handle_feature_evolution_query(repository_id, query_text)
+            
             elif query_type == 'code_ownership':
                 return _handle_ownership_query(repository_id, query_text)
             
@@ -883,8 +897,14 @@ def _handle_feature_introduction_query(repository_id: int, query_text: str) -> d
                           f"Try asking about related terms or check the commit history manually."
             }
         
+        # Generate commit summary using OpenAI if available
+        commit_summary = _generate_commit_summary(feature_commits, f"introduction of {' '.join(feature_keywords)}")
+        
         # Format the response
         response = f"**Feature Introduction Analysis for '{' '.join(feature_keywords)}':**\n\n"
+        
+        if commit_summary:
+            response += f"**Summary of Changes:**\n{commit_summary}\n\n"
         
         if len(feature_commits) == 1:
             commit = feature_commits[0]
@@ -936,6 +956,113 @@ def _handle_feature_introduction_query(repository_id: int, query_text: str) -> d
         return {
             'success': False,
             'error': 'Failed to analyze feature introduction',
+            'details': str(e)
+        }
+
+def _handle_feature_evolution_query(repository_id: int, query_text: str) -> dict:
+    """Handle queries about how features evolved or why they were introduced."""
+    try:
+        from analyzers.commit_analyzer import CommitAnalyzer
+        analyzer = CommitAnalyzer()
+        
+        # Extract potential feature keywords from the query
+        feature_keywords = _extract_feature_keywords(query_text)
+        
+        if not feature_keywords:
+            return {
+                'success': True,
+                'response': "I'd be happy to help you understand how a feature evolved! "
+                          "Please specify the feature name or functionality you're asking about. "
+                          "For example: 'How did the authentication system evolve?' or 'Why was the login feature changed?'"
+            }
+        
+        # Search for commits related to the feature
+        feature_commits = analyzer.find_feature_introduction_commits(repository_id, feature_keywords)
+        
+        if not feature_commits:
+            return {
+                'success': True,
+                'response': f"I couldn't find specific commits related to '{' '.join(feature_keywords)}'. "
+                          f"This could mean the feature was implemented before the repository was analyzed, "
+                          f"or it might be referenced by different terms in commit messages. "
+                          f"Try asking about related terms or check the commit history manually."
+            }
+        
+        # Sort commits chronologically to show evolution
+        feature_commits.sort(key=lambda x: x['timestamp'])
+        
+        # Generate evolution summary using OpenAI if available
+        evolution_summary = _generate_evolution_summary(feature_commits, f"evolution of {' '.join(feature_keywords)}")
+        
+        # Format the response
+        response = f"**Feature Evolution Analysis for '{' '.join(feature_keywords)}':**\n\n"
+        
+        if evolution_summary:
+            response += f"**Evolution Summary:**\n{evolution_summary}\n\n"
+        
+        # Show chronological development
+        response += f"**Chronological Development ({len(feature_commits)} commits):**\n\n"
+        
+        # Group commits by time periods for better readability
+        if len(feature_commits) <= 5:
+            # Show all commits if there are few
+            for i, commit in enumerate(feature_commits, 1):
+                response += f"**{i}. {commit['timestamp'][:10]} - {commit['author']}**\n"
+                response += f"   - Commit: {commit['hash'][:8]}\n"
+                response += f"   - Changes: {commit['files_changed']} files"
+                if commit.get('insertions') or commit.get('deletions'):
+                    response += f" (+{commit.get('insertions', 0)}/-{commit.get('deletions', 0)} lines)"
+                response += f"\n   - Message: {commit['message'][:100]}{'...' if len(commit['message']) > 100 else ''}\n\n"
+        else:
+            # Show key milestones for many commits
+            earliest = feature_commits[0]
+            latest = feature_commits[-1]
+            middle_idx = len(feature_commits) // 2
+            middle = feature_commits[middle_idx]
+            
+            response += f"**Initial Implementation ({earliest['timestamp'][:10]}):**\n"
+            response += f"- Author: {earliest['author']}\n"
+            response += f"- Commit: {earliest['hash'][:8]}\n"
+            response += f"- Message: {earliest['message']}\n\n"
+            
+            if len(feature_commits) > 2:
+                response += f"**Mid-Development ({middle['timestamp'][:10]}):**\n"
+                response += f"- Author: {middle['author']}\n"
+                response += f"- Commit: {middle['hash'][:8]}\n"
+                response += f"- Message: {middle['message']}\n\n"
+            
+            response += f"**Latest Changes ({latest['timestamp'][:10]}):**\n"
+            response += f"- Author: {latest['author']}\n"
+            response += f"- Commit: {latest['hash'][:8]}\n"
+            response += f"- Message: {latest['message']}\n\n"
+        
+        # Analysis summary
+        authors = set(commit['author'] for commit in feature_commits)
+        total_insertions = sum(commit.get('insertions', 0) for commit in feature_commits)
+        total_deletions = sum(commit.get('deletions', 0) for commit in feature_commits)
+        total_files = sum(commit.get('files_changed', 0) for commit in feature_commits)
+        
+        time_span = (
+            datetime.fromisoformat(feature_commits[-1]['timestamp'].replace('Z', '+00:00')) -
+            datetime.fromisoformat(feature_commits[0]['timestamp'].replace('Z', '+00:00'))
+        ).days
+        
+        response += f"**Evolution Statistics:**\n"
+        response += f"- **Development span:** {time_span} days\n"
+        response += f"- **Total commits:** {len(feature_commits)}\n"
+        response += f"- **Contributors:** {len(authors)} ({', '.join(sorted(authors))})\n"
+        response += f"- **Code changes:** +{total_insertions}/-{total_deletions} lines across {total_files} file changes\n"
+        response += f"- **Average commits per contributor:** {len(feature_commits) / len(authors):.1f}\n"
+        
+        return {
+            'success': True,
+            'response': response
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': 'Failed to analyze feature evolution',
             'details': str(e)
         }
 
@@ -1136,7 +1263,7 @@ def _extract_readme_features(repository_id: int, repo_data: dict) -> str:
     """Extract main features and functions from README file."""
     try:
         # Get repository path
-        repos_path = os.getenv('REPOS_PATH', './data/repos')
+        repos_path = os.getenv('REPOS_PATH', '../data/repos')
         repo_name = f"{repo_data['owner']}_{repo_data['name']}"
         repo_path = os.path.join(repos_path, repo_name)
         
@@ -1260,6 +1387,8 @@ def _generate_query_suggestions(repository_id: int, repo_data: dict) -> list:
         "Who are the main contributors to this project?",
         "Show me the commit timeline for the last 3 months",
         "When was the authentication feature introduced?",
+        "How did the authentication system evolve over time?",
+        "Why was the login feature changed?",
         "What are the development patterns in this repository?",
         "Which files have changed the most?",
         "When was the login functionality added?",
@@ -1268,7 +1397,9 @@ def _generate_query_suggestions(repository_id: int, repo_data: dict) -> list:
         "When was this project most active?",
         "Who are the experts for different file types?",
         "Show me collaboration patterns between developers",
-        "What are the most common types of commits?"
+        "What are the most common types of commits?",
+        "How has the codebase evolved over time?",
+        "Why were certain features introduced?"
     ]
     
     # Add repository-specific suggestions based on language
@@ -1279,3 +1410,110 @@ def _generate_query_suggestions(repository_id: int, repo_data: dict) -> list:
     
     logger.debug(f"Generated {len(suggestions)} suggestions for repository {repository_id}")
     return suggestions
+
+def _generate_commit_summary(commits: List[Dict], context: str) -> str:
+    """
+    Generate a summary of commits using OpenAI.
+    
+    Args:
+        commits: List of commit dictionaries
+        context: Context for the summary (e.g., "introduction of authentication")
+        
+    Returns:
+        Summary text or None if OpenAI is not available
+    """
+    try:
+        client = get_openai_client()
+        if not client or not commits:
+            return None
+        
+        # Prepare commit messages for analysis
+        commit_messages = []
+        for commit in commits[:10]:  # Limit to 10 most relevant commits
+            commit_info = f"[{commit['timestamp'][:10]}] {commit['author']}: {commit['message']}"
+            commit_messages.append(commit_info)
+        
+        commits_text = "\n".join(commit_messages)
+        
+        system_prompt = f"""You are a code repository analyst. Analyze the following commit messages related to the {context} and provide a concise summary.
+
+Focus on:
+- What was implemented or changed
+- The main purpose or motivation behind the changes
+- Key technical decisions or approaches
+- Any notable patterns or evolution in the implementation
+
+Keep the summary concise (2-4 sentences) and technical but accessible."""
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze these commits:\n\n{commits_text}"}
+            ],
+            temperature=0.1,
+            max_tokens=200
+        )
+        
+        summary = response.choices[0].message.content.strip()
+        logger.debug(f"Generated commit summary: {summary[:100]}...")
+        return summary
+        
+    except Exception as e:
+        logger.warning(f"Failed to generate commit summary: {e}")
+        return None
+
+def _generate_evolution_summary(commits: List[Dict], context: str) -> str:
+    """
+    Generate an evolution summary of commits using OpenAI.
+    
+    Args:
+        commits: List of commit dictionaries in chronological order
+        context: Context for the summary (e.g., "evolution of authentication")
+        
+    Returns:
+        Evolution summary text or None if OpenAI is not available
+    """
+    try:
+        client = get_openai_client()
+        if not client or not commits:
+            return None
+        
+        # Prepare chronological commit information
+        commit_timeline = []
+        for i, commit in enumerate(commits[:15]):  # Limit to 15 commits
+            commit_info = f"{i+1}. [{commit['timestamp'][:10]}] {commit['author']}: {commit['message']}"
+            if commit.get('files_changed'):
+                commit_info += f" ({commit['files_changed']} files)"
+            commit_timeline.append(commit_info)
+        
+        timeline_text = "\n".join(commit_timeline)
+        
+        system_prompt = f"""You are a software development analyst. Analyze the chronological evolution of commits related to the {context}.
+
+Provide insights on:
+- How the feature/component evolved over time
+- Key phases or milestones in development
+- Reasons for changes (bug fixes, enhancements, refactoring)
+- Technical decisions and their motivations
+- Overall development patterns and trends
+
+Format as a narrative summary (3-5 sentences) that tells the story of how this feature developed."""
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze this chronological development:\n\n{timeline_text}"}
+            ],
+            temperature=0.1,
+            max_tokens=300
+        )
+        
+        summary = response.choices[0].message.content.strip()
+        logger.debug(f"Generated evolution summary: {summary[:100]}...")
+        return summary
+        
+    except Exception as e:
+        logger.warning(f"Failed to generate evolution summary: {e}")
+        return None
