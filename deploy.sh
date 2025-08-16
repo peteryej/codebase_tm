@@ -13,16 +13,20 @@ export FLASK_DEBUG=False
 mkdir -p data/cache
 mkdir -p data/repos
 
+# Get absolute path to current directory
+SCRIPT_DIR=$(pwd)
+VENV_DIR="$SCRIPT_DIR/venv"
+
 # Remove existing virtual environment if it exists but is broken
-if [ -d "venv" ] && [ ! -f "venv/bin/python" ]; then
+if [ -d "$VENV_DIR" ] && [ ! -f "$VENV_DIR/bin/python" ]; then
     echo "Removing broken virtual environment..."
-    rm -rf venv
+    rm -rf "$VENV_DIR"
 fi
 
 # Create and setup virtual environment FIRST
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating virtual environment at $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
     
     # Check if creation was successful
     if [ $? -ne 0 ]; then
@@ -32,31 +36,37 @@ if [ ! -d "venv" ]; then
     fi
 fi
 
+# Debug: List contents of venv directory
+echo "Contents of venv directory:"
+ls -la "$VENV_DIR/" || echo "venv directory does not exist"
+
 # Verify virtual environment was created successfully
-if [ ! -f "venv/bin/python" ]; then
+if [ ! -f "$VENV_DIR/bin/python" ]; then
     echo "ERROR: Virtual environment creation failed!"
-    echo "venv/bin/python does not exist"
+    echo "$VENV_DIR/bin/python does not exist"
+    echo "Contents of $VENV_DIR/bin/:"
+    ls -la "$VENV_DIR/bin/" || echo "bin directory does not exist"
     echo "Make sure python3-venv is installed: sudo apt install python3-venv"
     exit 1
 fi
 
 echo "Virtual environment created successfully"
 echo "Activating virtual environment..."
-source venv/bin/activate
+source "$VENV_DIR/bin/activate"
 
 echo "Installing/updating dependencies..."
-venv/bin/pip install --upgrade pip
-venv/bin/pip install -r requirements.txt
+"$VENV_DIR/bin/pip" install --upgrade pip
+"$VENV_DIR/bin/pip" install -r requirements.txt
 
 # Verify dependencies were installed
-if [ ! -f "venv/bin/gunicorn" ]; then
+if [ ! -f "$VENV_DIR/bin/gunicorn" ]; then
     echo "Installing gunicorn..."
-    venv/bin/pip install gunicorn
+    "$VENV_DIR/bin/pip" install gunicorn
 fi
 
 # Initialize database AFTER dependencies are installed
 echo "Initializing database..."
-venv/bin/python backend/database/init_db.py
+"$VENV_DIR/bin/python" backend/database/init_db.py
 
 # Start the application
 echo "Starting Codebase Time Machine..."
@@ -78,4 +88,4 @@ export FLASK_APP=backend.app:app
 echo "Starting with Gunicorn on port 80..."
 
 # Start with gunicorn (already installed above)
-exec venv/bin/gunicorn -w 4 -b 0.0.0.0:80 --timeout 300 --access-logfile - --error-logfile - --chdir $(pwd) backend.app:app
+exec "$VENV_DIR/bin/gunicorn" -w 4 -b 0.0.0.0:80 --timeout 300 --access-logfile - --error-logfile - --chdir "$SCRIPT_DIR" backend.app:app
