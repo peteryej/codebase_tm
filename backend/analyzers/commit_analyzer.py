@@ -507,3 +507,158 @@ class CommitAnalyzer:
             return {'error': str(e)}
         finally:
             session.close()
+    
+    def find_feature_introduction_commits(self, repo_id: int, feature_keywords: List[str]) -> List[Dict]:
+        """
+        Find commits that likely introduced a specific feature.
+        
+        Args:
+            repo_id: Database repository ID
+            feature_keywords: List of keywords related to the feature
+            
+        Returns:
+            List of commits that match the feature keywords
+        """
+        session = get_session()
+        try:
+            if not feature_keywords:
+                return []
+            
+            # Build search patterns for commit messages
+            search_patterns = []
+            for keyword in feature_keywords:
+                # Create case-insensitive pattern
+                search_patterns.append(f"%{keyword.lower()}%")
+            
+            # Query commits that match any of the keywords
+            from sqlalchemy import or_, func
+            
+            # Create OR conditions for each keyword
+            conditions = []
+            for pattern in search_patterns:
+                conditions.append(func.lower(Commit.message).like(pattern))
+            
+            matching_commits = session.query(Commit).filter(
+                Commit.repo_id == repo_id,
+                or_(*conditions)
+            ).order_by(Commit.timestamp).all()
+            
+            # Convert to list of dictionaries with relevance scoring
+            commits_with_scores = []
+            for commit in matching_commits:
+                # Calculate relevance score based on keyword matches
+                message_lower = commit.message.lower()
+                score = 0
+                matched_keywords = []
+                
+                for keyword in feature_keywords:
+                    keyword_lower = keyword.lower()
+                    if keyword_lower in message_lower:
+                        # Higher score for exact matches
+                        score += message_lower.count(keyword_lower) * 2
+                        matched_keywords.append(keyword)
+                        
+                        # Bonus for keywords in commit title (first line)
+                        first_line = commit.message.split('\n')[0].lower()
+                        if keyword_lower in first_line:
+                            score += 3
+                
+                # Bonus for commits that look like feature additions
+                feature_indicators = ['add', 'implement', 'create', 'introduce', 'new', 'feat']
+                for indicator in feature_indicators:
+                    if indicator in message_lower:
+                        score += 1
+                
+                # Penalty for merge commits (usually not the original implementation)
+                if commit.is_merge:
+                    score -= 2
+                
+                commits_with_scores.append({
+                    'commit': commit,
+                    'score': score,
+                    'matched_keywords': matched_keywords
+                })
+            
+            # Sort by relevance score (highest first) and then by date (earliest first for same score)
+            commits_with_scores.sort(key=lambda x: (-x['score'], x['commit'].timestamp))
+            
+            # Convert to the expected format
+            result_commits = []
+            for item in commits_with_scores[:10]:  # Limit to top 10 most relevant
+                commit = item['commit']
+                result_commits.append({
+                    'hash': commit.id,
+                    'author': commit.author_name,
+                    'timestamp': commit.timestamp.isoformat(),
+                    'message': commit.message.strip(),
+                    'files_changed': commit.files_changed,
+                    'insertions': commit.insertions,
+                    'deletions': commit.deletions,
+                    'is_merge': commit.is_merge,
+                    'relevance_score': item['score'],
+                    'matched_keywords': item['matched_keywords']
+                })
+            
+            logger.info(f"Found {len(result_commits)} commits matching feature keywords: {feature_keywords}")
+            return result_commits
+            
+        except Exception as e:
+            logger.error(f"Error finding feature introduction commits: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def get_commits_by_file_pattern(self, repo_id: int, file_pattern: str) -> List[Dict]:
+        """
+        Get commits that modified files matching a pattern.
+        
+        Args:
+            repo_id: Database repository ID
+            file_pattern: Pattern to match file paths (can include wildcards)
+            
+        Returns:
+            List of commits that modified matching files
+        """
+        session = get_session()
+        try:
+            from sqlalchemy import distinct
+            
+            # Find files matching the pattern
+            matching_files = session.query(File).filter(
+                File.repo_id == repo_id,
+                File.path.like(file_pattern.replace('*', '%'))
+            ).all()
+            
+            if not matching_files:
+                return []
+            
+            file_ids = [f.id for f in matching_files]
+            
+            # Find commits that modified these files
+            commits = session.query(Commit).join(
+                FileChange, Commit.id == FileChange.commit_id
+            ).filter(
+                FileChange.file_id.in_(file_ids)
+            ).order_by(Commit.timestamp).distinct().all()
+            
+            # Convert to list format
+            result_commits = []
+            for commit in commits:
+                result_commits.append({
+                    'hash': commit.id,
+                    'author': commit.author_name,
+                    'timestamp': commit.timestamp.isoformat(),
+                    'message': commit.message.strip(),
+                    'files_changed': commit.files_changed,
+                    'insertions': commit.insertions,
+                    'deletions': commit.deletions,
+                    'is_merge': commit.is_merge
+                })
+            
+            return result_commits
+            
+        except Exception as e:
+            logger.error(f"Error getting commits by file pattern: {e}")
+            return []
+        finally:
+            session.close()
