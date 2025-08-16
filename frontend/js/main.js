@@ -316,13 +316,14 @@ class CodebaseTimeMachine {
             this.showLoadingOverlay(true);
 
             // Load repository data
-            const [authorsData, ownershipData] = await Promise.all([
+            const [authorsData, ownershipData, statusData] = await Promise.all([
                 api.getAuthorStatistics(this.currentRepository.id),
-                api.getOwnershipOverview(this.currentRepository.id)
+                api.getOwnershipOverview(this.currentRepository.id),
+                api.getAnalysisStatus(this.currentRepository.id)
             ]);
 
             // Update repository header
-            this.updateRepositoryHeader(authorsData, ownershipData);
+            this.updateRepositoryHeader(authorsData, ownershipData, statusData);
 
             // Initialize chat interface
             if (window.ChatInterface) {
@@ -336,7 +337,7 @@ class CodebaseTimeMachine {
             }
 
             // Load additional info panels
-            this.loadInfoPanels(authorsData, ownershipData);
+            this.loadInfoPanels(authorsData, ownershipData, statusData);
 
             // Show dashboard
             this.showSection('dashboard-section');
@@ -352,7 +353,7 @@ class CodebaseTimeMachine {
     /**
      * Update repository header with basic info
      */
-    updateRepositoryHeader(authorsData, ownershipData) {
+    updateRepositoryHeader(authorsData, ownershipData, statusData) {
         const repoName = document.getElementById('repo-name');
         const repoDescription = document.getElementById('repo-description');
         const totalCommits = document.getElementById('total-commits');
@@ -372,15 +373,31 @@ class CodebaseTimeMachine {
             if (totalContributors) totalContributors.textContent = authorsData.authors.length.toLocaleString();
         }
 
-        if (ownershipData && ownershipData.ownership) {
-            if (totalFiles) totalFiles.textContent = ownershipData.ownership.total_files?.toLocaleString() || '0';
+        // Try to get total files from multiple sources
+        let fileCount = 0;
+        
+        // First try ownership data
+        if (ownershipData && ownershipData.ownership && ownershipData.ownership.total_files) {
+            fileCount = ownershipData.ownership.total_files;
+        }
+        // Then try status data from database
+        else if (statusData && statusData.total_files) {
+            fileCount = statusData.total_files;
+        }
+        // Finally try commits data if available
+        else if (authorsData && authorsData.total_files) {
+            fileCount = authorsData.total_files;
+        }
+        
+        if (totalFiles) {
+            totalFiles.textContent = fileCount.toLocaleString();
         }
     }
 
     /**
      * Load info panels
      */
-    loadInfoPanels(authorsData, ownershipData) {
+    loadInfoPanels(authorsData, ownershipData, statusData) {
         this.loadFeatureCommits();
     }
 
