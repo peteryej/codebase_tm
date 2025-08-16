@@ -48,4 +48,11 @@ export FLASK_APP=backend.app:app
 
 # Run with gunicorn for production (stay in root directory for correct paths)
 echo "Starting with Gunicorn on port 80..."
+
+# Check if gunicorn is installed, if not install it
+if [ ! -f "./venv/bin/gunicorn" ]; then
+    echo "Gunicorn not found, installing..."
+    ./venv/bin/pip install gunicorn
+fi
+
 exec ./venv/bin/gunicorn -w 4 -b 0.0.0.0:80 --timeout 300 --access-logfile - --error-logfile - --chdir $(pwd) backend.app:app
