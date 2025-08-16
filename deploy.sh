@@ -15,7 +15,7 @@ mkdir -p data/repos
 
 # Initialize database (always run to ensure tables exist)
 echo "Initializing database..."
-python backend/database/init_db.py
+./venv/bin/python backend/database/init_db.py
 
 # Install dependencies if needed
 if [ ! -d "venv" ]; then
@@ -27,8 +27,8 @@ echo "Activating virtual environment..."
 source venv/bin/activate
 
 echo "Installing/updating dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
 
 # Start the application
 echo "Starting Codebase Time Machine..."
@@ -48,4 +48,4 @@ export FLASK_APP=backend.app:app
 
 # Run with gunicorn for production (stay in root directory for correct paths)
 echo "Starting with Gunicorn on port 80..."
-exec gunicorn -w 4 -b 0.0.0.0:80 --timeout 300 --access-logfile - --error-logfile - --chdir $(pwd) backend.app:app
+exec ./venv/bin/gunicorn -w 4 -b 0.0.0.0:80 --timeout 300 --access-logfile - --error-logfile - --chdir $(pwd) backend.app:app

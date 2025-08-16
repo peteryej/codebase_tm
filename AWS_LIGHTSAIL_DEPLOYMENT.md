@@ -56,9 +56,9 @@ cp .env.production .env
 nano .env
 # Update GITHUB_TOKEN and OPENAI_API_KEY with your actual keys
 
-# Make deployment script executable and run
+# Make deployment script executable and run (requires sudo for port 80)
 chmod +x deploy.sh
-./deploy.sh
+sudo ./deploy.sh
 ```
 
 ### 4. Access Your Application
