@@ -18,7 +18,8 @@ const CONFIG = {
             OWNERSHIP: '/repository/{id}/ownership',
             OWNERSHIP_FILE: '/repository/{id}/ownership/file',
             OWNERSHIP_HEATMAP: '/repository/{id}/ownership/heatmap',
-            EXPERTS: '/repository/{id}/experts'
+            EXPERTS: '/repository/{id}/experts',
+            FEATURES: '/repository/{id}/features'
         },
         CHAT: {
             QUERY: '/chat/query',

@@ -152,6 +152,11 @@ class APIClient {
         return this.get(endpoint, params);
     }
 
+    async getRepositoryFeatures(repositoryId) {
+        const endpoint = CONFIG.ENDPOINTS.REPOSITORY.FEATURES.replace('{id}', repositoryId);
+        return this.get(endpoint);
+    }
+
     // Chat API methods
     async sendChatQuery(repositoryId, query, useCache = true) {
         return this.post(CONFIG.ENDPOINTS.CHAT.QUERY, {

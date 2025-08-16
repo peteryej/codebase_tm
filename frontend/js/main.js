@@ -381,93 +381,62 @@ class CodebaseTimeMachine {
      * Load info panels
      */
     loadInfoPanels(authorsData, ownershipData) {
-        this.loadTopContributors(authorsData);
-        this.loadLanguageBreakdown(ownershipData);
-        this.loadRecentActivity();
+        this.loadFeatureCommits();
     }
 
     /**
-     * Load top contributors panel
+     * Load feature to commits panel
      */
-    loadTopContributors(authorsData) {
-        const container = document.getElementById('top-contributors');
-        if (!container || !authorsData?.authors) return;
-
-        container.innerHTML = '';
-
-        authorsData.authors.slice(0, 5).forEach(author => {
-            const item = document.createElement('div');
-            item.className = 'contributor-item';
-            item.innerHTML = `
-                <div>
-                    <div class="contributor-name">${this.escapeHtml(author.name)}</div>
-                    <div class="contributor-stats">${author.commits} commits (${author.percentage}%)</div>
-                </div>
-            `;
-            container.appendChild(item);
-        });
-    }
-
-    /**
-     * Load language breakdown panel
-     */
-    loadLanguageBreakdown(ownershipData) {
-        const container = document.getElementById('language-breakdown');
-        if (!container || !ownershipData?.ownership?.extension_breakdown) return;
-
-        container.innerHTML = '';
-
-        ownershipData.ownership.extension_breakdown.slice(0, 5).forEach(ext => {
-            const item = document.createElement('div');
-            item.className = 'language-item';
-            
-            const language = ext.extension === 'no_extension' ? 'Other' : ext.extension.toUpperCase();
-            const percentage = Math.round((ext.files / ownershipData.ownership.total_files) * 100);
-            
-            item.innerHTML = `
-                <span class="language-name">${this.escapeHtml(language)}</span>
-                <span class="language-percentage">${ext.files} files (${percentage}%)</span>
-            `;
-            container.appendChild(item);
-        });
-    }
-
-    /**
-     * Load recent activity panel
-     */
-    async loadRecentActivity() {
-        const container = document.getElementById('recent-activity');
+    async loadFeatureCommits() {
+        const container = document.getElementById('feature-commits');
         if (!container || !this.currentRepository) return;
 
         try {
-            const timelineData = await api.getCommitTimeline(this.currentRepository.id, 7); // Last 7 days
+            const featuresData = await api.getRepositoryFeatures(this.currentRepository.id);
             
             container.innerHTML = '';
 
-            if (timelineData.timeline && timelineData.timeline.length > 0) {
-                const recentDays = timelineData.timeline.slice(-7);
-                
-                recentDays.forEach(day => {
-                    if (day.commits > 0) {
-                        const item = document.createElement('div');
-                        item.className = 'activity-item';
-                        item.innerHTML = `
-                            <div class="activity-date">${new Date(day.date).toLocaleDateString()}</div>
-                            <div class="activity-description">${day.commits} commit${day.commits !== 1 ? 's' : ''}</div>
-                        `;
-                        container.appendChild(item);
+            if (featuresData.features && featuresData.features.length > 0) {
+                featuresData.features.slice(0, 5).forEach(feature => {
+                    const item = document.createElement('div');
+                    item.className = 'feature-item';
+                    
+                    // Create feature header
+                    const header = document.createElement('div');
+                    header.className = 'feature-header';
+                    header.innerHTML = `
+                        <div class="feature-name">${this.escapeHtml(feature.name)}</div>
+                        <div class="feature-count">${feature.commit_count} commits</div>
+                    `;
+                    item.appendChild(header);
+                    
+                    // Create commits list
+                    if (feature.recent_commits && feature.recent_commits.length > 0) {
+                        const commitsList = document.createElement('div');
+                        commitsList.className = 'feature-commits';
+                        
+                        feature.recent_commits.forEach(commit => {
+                            const commitItem = document.createElement('div');
+                            commitItem.className = 'commit-item';
+                            commitItem.innerHTML = `
+                                <div class="commit-hash">${commit.hash.substring(0, 7)}</div>
+                                <div class="commit-message">${this.escapeHtml(commit.message.split('\n')[0].substring(0, 60))}${commit.message.length > 60 ? '...' : ''}</div>
+                                <div class="commit-author">${this.escapeHtml(commit.author)}</div>
+                            `;
+                            commitsList.appendChild(commitItem);
+                        });
+                        
+                        item.appendChild(commitsList);
                     }
+                    
+                    container.appendChild(item);
                 });
-
-                if (container.children.length === 0) {
-                    container.innerHTML = '<p>No recent activity</p>';
-                }
             } else {
-                container.innerHTML = '<p>No recent activity</p>';
+                container.innerHTML = '<p>No feature data available</p>';
             }
         } catch (error) {
-            console.error('Error loading recent activity:', error);
-            container.innerHTML = '<p>Failed to load recent activity</p>';
+            console.error('Error loading feature commits:', error);
+            container.innerHTML = '<p>Failed to load feature data</p>';
         }
     }
 

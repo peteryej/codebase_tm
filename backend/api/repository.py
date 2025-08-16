@@ -332,6 +332,68 @@ def get_code_experts(repo_id):
         logger.error(f"Error getting code experts: {e}")
         return jsonify({'error': 'Failed to get experts', 'details': str(e)}), 500
 
+@repository_bp.route('/<int:repo_id>/features', methods=['GET'])
+def get_repository_features(repo_id):
+    """Get main features and related commits for the repository."""
+    try:
+        analyzer = CommitAnalyzer()
+        
+        # Get commit patterns to identify main feature types
+        patterns = analyzer.get_commit_patterns(repo_id)
+        
+        if 'error' in patterns:
+            return jsonify({'error': 'Failed to analyze commit patterns', 'details': patterns['error']}), 500
+        
+        # Extract main feature categories from commit message types
+        feature_categories = []
+        message_types = patterns.get('message_types', {})
+        
+        # Define feature mappings based on commit message patterns
+        feature_mappings = {
+            'feat': {'name': 'New Features', 'keywords': ['feat', 'feature', 'add', 'implement', 'create', 'new']},
+            'fix': {'name': 'Bug Fixes', 'keywords': ['fix', 'bugfix', 'bug', 'patch', 'resolve']},
+            'refactor': {'name': 'Code Refactoring', 'keywords': ['refactor', 'restructure', 'reorganize', 'cleanup']},
+            'docs': {'name': 'Documentation', 'keywords': ['docs', 'doc', 'documentation', 'readme']},
+            'test': {'name': 'Testing', 'keywords': ['test', 'testing', 'spec', 'unit test']},
+            'update': {'name': 'Updates & Improvements', 'keywords': ['update', 'upgrade', 'improve', 'enhance']},
+            'initial': {'name': 'Initial Setup', 'keywords': ['initial', 'init', 'setup', 'bootstrap']}
+        }
+        
+        # Get top feature categories based on commit frequency
+        for category, info in feature_mappings.items():
+            commit_count = message_types.get(category, 0)
+            if commit_count > 0:
+                # Get related commits for this feature category
+                related_commits = analyzer.find_feature_introduction_commits(repo_id, info['keywords'])
+                
+                feature_categories.append({
+                    'name': info['name'],
+                    'category': category,
+                    'commit_count': commit_count,
+                    'keywords': info['keywords'],
+                    'recent_commits': related_commits[:3]  # Top 3 most relevant commits
+                })
+        
+        # Sort by commit count (most active features first)
+        feature_categories.sort(key=lambda x: x['commit_count'], reverse=True)
+        
+        # Limit to top 5 features
+        feature_categories = feature_categories[:5]
+        
+        return jsonify({
+            'repository_id': repo_id,
+            'features': feature_categories,
+            'total_commits': patterns.get('total_commits', 0),
+            'analysis_summary': {
+                'most_active_feature': feature_categories[0]['name'] if feature_categories else None,
+                'feature_diversity': len(feature_categories)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting repository features: {e}")
+        return jsonify({'error': 'Failed to get features', 'details': str(e)}), 500
+
 @repository_bp.route('/list', methods=['GET'])
 def list_repositories():
     """List all analyzed repositories."""
