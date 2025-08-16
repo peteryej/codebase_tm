@@ -1,6 +1,7 @@
 # Core Web Framework
 Flask>=3.0.0
 Flask-CORS>=4.0.0
+gunicorn>=21.2.0
 
 # Git Operations
 GitPython>=3.1.40

@@ -23,8 +23,13 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
     app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
     
-    # Enable CORS for all routes
-    CORS(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000'])
+    # Enable CORS for all routes - Environment aware
+    if app.config['DEBUG']:
+        # Development: Allow localhost origins
+        CORS(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5000', 'http://127.0.0.1:5000'])
+    else:
+        # Production: Allow all origins (since we're serving frontend from same domain)
+        CORS(app, origins="*")
     
     # Import and register blueprints
     from api.repository import repository_bp
@@ -62,8 +67,10 @@ def create_app():
     
     return app
 
+# Create app instance for gunicorn
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     port = int(os.getenv('FLASK_PORT', 5000))
     
     logger.info(f"Starting Codebase Time Machine on port {port}")

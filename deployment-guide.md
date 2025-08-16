@@ -154,6 +154,65 @@ codebase_tm/
 └── README.md
 ```
 
+## AWS Lightsail Deployment
+
+### Quick AWS Lightsail Setup
+
+1. **Create Lightsail Instance**:
+   - Choose "OS Only" → Ubuntu 20.04 LTS or newer
+   - Select instance plan (minimum: 1 GB RAM, 1 vCPU)
+   - Open port 5000 in networking tab
+
+2. **Connect and Deploy**:
+   ```bash
+   # Connect to your Lightsail instance via SSH
+   ssh -i your-key.pem ubuntu@your-lightsail-ip
+   
+   # Install dependencies
+   sudo apt update
+   sudo apt install -y python3 python3-pip python3-venv git
+   
+   # Clone your repository
+   git clone your-repo-url
+   cd codebase_tm
+   
+   # Copy production environment
+   cp .env.production .env
+   # Edit .env with your actual API keys
+   nano .env
+   
+   # Run deployment script
+   ./deploy.sh
+   ```
+
+3. **Access Your Application**:
+   - Your app will be available at: `http://your-lightsail-ip:5000`
+   - The deployment script will show you the exact URL
+
+### Troubleshooting AWS Lightsail
+
+If you get "Network error" after deployment:
+
+1. **Check if the service is running**:
+   ```bash
+   ps aux | grep gunicorn
+   ```
+
+2. **Check logs**:
+   ```bash
+   # If running in background, check system logs
+   journalctl -f
+   ```
+
+3. **Verify port is open**:
+   - Go to Lightsail console → Networking tab
+   - Ensure port 5000 is open for HTTP traffic
+
+4. **Test API directly**:
+   ```bash
+   curl http://your-lightsail-ip:5000/health
+   ```
+
 ## Production Deployment
 
 ### Using Gunicorn

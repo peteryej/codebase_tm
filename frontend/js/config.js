@@ -3,8 +3,15 @@
  */
 
 const CONFIG = {
-    // API Configuration
-    API_BASE_URL: 'http://localhost:5000/api',
+    // API Configuration - Environment aware
+    API_BASE_URL: (() => {
+        // Check if we're in development (localhost)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return 'http://localhost:5000/api';
+        }
+        // In production, use the same host as the frontend
+        return `${window.location.protocol}//${window.location.host}/api`;
+    })(),
     
     // Endpoints
     ENDPOINTS: {
