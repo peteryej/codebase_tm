@@ -3,6 +3,13 @@
 # Deployment script for AWS Lightsail
 # This script helps deploy the Codebase Time Machine application
 
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: This script must be run with sudo"
+    echo "Please run: sudo ./deploy.sh"
+    exit 1
+fi
+
 echo "Starting deployment for Codebase Time Machine..."
 
 # Set production environment variables
